@@ -3,7 +3,7 @@ from datetime import datetime
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from config import WATCHLIST, MARKET_OPEN, MARKET_CLOSE, TIMEZONE
+from config import WATCHLIST, MARKET_OPEN, MARKET_CLOSE, TIMEZONE, POST_ALL_STOCKS_TO_DISCORD
 from fetcher import get_price
 from alert_engine import check_alerts
 from notifier import send_telegram, send_discord
@@ -26,6 +26,15 @@ def is_market_open() -> bool:
     return market_open <= current_time <= market_close
 
 
+def format_stock_message(data: dict) -> str:
+    return (
+        f"📊 {data.get('symbol', 'UNKNOWN').replace('.NS', '')}\n"
+        f"Current: ₹{data.get('current', 'N/A')}\n"
+        f"Open: ₹{data.get('open', 'N/A')}  High: ₹{data.get('high', 'N/A')}  Low: ₹{data.get('low', 'N/A')}\n"
+        f"Change: {data.get('pct_chg', 0):+.2f}%"
+    )
+
+
 def scan():
     try:
         if not is_market_open():
@@ -38,6 +47,11 @@ def scan():
                 if not data:
                     logger.warning(f"No data for {symbol}")
                     continue
+
+                if POST_ALL_STOCKS_TO_DISCORD:
+                    snapshot_msg = format_stock_message(data)
+                    print(f"\nPosting snapshot for {symbol}:\n{snapshot_msg}\n")
+                    send_discord(snapshot_msg)
                 
                 alerts = check_alerts(data)
                 for msg in alerts:
