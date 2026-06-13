@@ -15,8 +15,16 @@ logger = logging.getLogger(__name__)
 IST = pytz.timezone(TIMEZONE)
 
 def is_market_open() -> bool:
-    now = datetime.now(IST).strftime("%H:%M")
-    return MARKET_OPEN <= now <= MARKET_CLOSE
+    now = datetime.now(IST)
+    # Weekday: Monday=0, Sunday=6
+    if now.weekday() >= 5:
+        return False
+
+    current_time = now.time()
+    market_open = datetime.strptime(MARKET_OPEN, "%H:%M").time()
+    market_close = datetime.strptime(MARKET_CLOSE, "%H:%M").time()
+    return market_open <= current_time <= market_close
+
 
 def scan():
     try:
