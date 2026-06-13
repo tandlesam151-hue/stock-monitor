@@ -4,7 +4,8 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
-DB = "monitor.db"
+# Use absolute path to ensure database is always in the same location
+DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "monitor.db")
 
 def init_db():
     """Initialize SQLite database for alert tracking."""
