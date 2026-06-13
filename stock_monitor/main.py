@@ -31,17 +31,19 @@ def is_market_open() -> bool:
 
 def format_stock_message(data: dict) -> str:
     symbol = data.get('symbol', 'UNKNOWN').replace('.NS', '')
+    timestamp = datetime.now(IST).strftime("%H:%M %d-%b")
     current = f"₹{data.get('current', 'N/A'):.2f}" if isinstance(data.get('current'), (int, float)) else f"₹{data.get('current', 'N/A')}"
     open_price = f"₹{data.get('open', 'N/A'):.2f}" if isinstance(data.get('open'), (int, float)) else f"₹{data.get('open', 'N/A')}"
     high = f"₹{data.get('high', 'N/A'):.2f}" if isinstance(data.get('high'), (int, float)) else f"₹{data.get('high', 'N/A')}"
     low = f"₹{data.get('low', 'N/A'):.2f}" if isinstance(data.get('low'), (int, float)) else f"₹{data.get('low', 'N/A')}"
     pct = f"{data.get('pct_chg', 0):+.2f}%"
+    volume = f"{data.get('volume', 'N/A'):,}" if isinstance(data.get('volume'), int) else data.get('volume', 'N/A')
 
     return (
-        f"📊 {symbol}\n"
+        f"📊 {symbol} — {timestamp}\n"
         "```\n"
-        f"Current | Open     | High     | Low      | Change\n"
-        f"{current:<8} | {open_price:<8} | {high:<8} | {low:<8} | {pct}\n"
+        f"Current | Open     | High     | Low      | Change  | Volume\n"
+        f"{current:<8} | {open_price:<8} | {high:<8} | {low:<8} | {pct:<7} | {volume}\n"
         "```"
     )
 
