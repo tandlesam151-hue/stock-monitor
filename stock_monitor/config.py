@@ -16,6 +16,8 @@ MARKET_OPEN  = "09:15"
 MARKET_CLOSE = "15:30"
 TIMEZONE     = os.getenv("TIMEZONE", "Asia/Kolkata")
 POST_ALL_STOCKS_TO_DISCORD = os.getenv("POST_ALL_STOCKS_TO_DISCORD", "false").strip().lower() in ("1", "true", "yes")
+ALLOW_WEEKEND_RUN = os.getenv("ALLOW_WEEKEND_RUN", "false").strip().lower() in ("1", "true", "yes")
+ALLOW_ANYTIME = os.getenv("ALLOW_ANYTIME", "false").strip().lower() in ("1", "true", "yes")
 
 # Read credentials from environment variables (safer for different environments)
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "YOUR_BOT_TOKEN")

@@ -3,7 +3,7 @@ from datetime import datetime
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from config import WATCHLIST, MARKET_OPEN, MARKET_CLOSE, TIMEZONE, POST_ALL_STOCKS_TO_DISCORD
+from config import WATCHLIST, MARKET_OPEN, MARKET_CLOSE, TIMEZONE, POST_ALL_STOCKS_TO_DISCORD, ALLOW_WEEKEND_RUN, ALLOW_ANYTIME
 from fetcher import get_price
 from alert_engine import check_alerts
 from notifier import send_telegram, send_discord
@@ -15,9 +15,12 @@ logger = logging.getLogger(__name__)
 IST = pytz.timezone(TIMEZONE)
 
 def is_market_open() -> bool:
+    if ALLOW_ANYTIME:
+        return True
+
     now = datetime.now(IST)
     # Weekday: Monday=0, Sunday=6
-    if now.weekday() >= 5:
+    if now.weekday() >= 5 and not ALLOW_WEEKEND_RUN:
         return False
 
     current_time = now.time()
