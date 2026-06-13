@@ -15,7 +15,7 @@ ALERT_THRESHOLDS = {
 MARKET_OPEN  = "09:15"
 MARKET_CLOSE = "15:30"
 TIMEZONE     = os.getenv("TIMEZONE", "Asia/Kolkata")
-POST_ALL_STOCKS_TO_DISCORD = True  # enabled for testing
+POST_ALL_STOCKS_TO_DISCORD = False  # disable stock snapshot posting by default
 ALLOW_WEEKEND_RUN = True          # enabled for testing
 ALLOW_ANYTIME = True              # enabled for testing
 
