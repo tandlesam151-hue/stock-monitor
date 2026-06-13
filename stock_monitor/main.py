@@ -30,11 +30,19 @@ def is_market_open() -> bool:
 
 
 def format_stock_message(data: dict) -> str:
+    symbol = data.get('symbol', 'UNKNOWN').replace('.NS', '')
+    current = f"₹{data.get('current', 'N/A'):.2f}" if isinstance(data.get('current'), (int, float)) else f"₹{data.get('current', 'N/A')}"
+    open_price = f"₹{data.get('open', 'N/A'):.2f}" if isinstance(data.get('open'), (int, float)) else f"₹{data.get('open', 'N/A')}"
+    high = f"₹{data.get('high', 'N/A'):.2f}" if isinstance(data.get('high'), (int, float)) else f"₹{data.get('high', 'N/A')}"
+    low = f"₹{data.get('low', 'N/A'):.2f}" if isinstance(data.get('low'), (int, float)) else f"₹{data.get('low', 'N/A')}"
+    pct = f"{data.get('pct_chg', 0):+.2f}%"
+
     return (
-        f"📊 {data.get('symbol', 'UNKNOWN').replace('.NS', '')}\n"
-        f"Current: ₹{data.get('current', 'N/A')}\n"
-        f"Open: ₹{data.get('open', 'N/A')}  High: ₹{data.get('high', 'N/A')}  Low: ₹{data.get('low', 'N/A')}\n"
-        f"Change: {data.get('pct_chg', 0):+.2f}%"
+        f"📊 {symbol}\n"
+        "```\n"
+        f"Current | Open     | High     | Low      | Change\n"
+        f"{current:<8} | {open_price:<8} | {high:<8} | {low:<8} | {pct}\n"
+        "```"
     )
 
 
@@ -70,8 +78,8 @@ def scan():
 if __name__ == "__main__":
     init_db()
     scheduler = BlockingScheduler(timezone=IST)
-    scheduler.add_job(scan, "interval", minutes=5)
-    logger.info("Stock monitor started, scanning every 5 minutes...")
+    scheduler.add_job(scan, "interval", minutes=5, next_run_time=datetime.now(IST))
+    logger.info("Stock monitor started, scanning every 5 minutes (first run now)...")
     try:
         scheduler.start()
     except KeyboardInterrupt:

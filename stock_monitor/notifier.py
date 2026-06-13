@@ -54,7 +54,7 @@ def send_discord(text: str) -> bool:
             logger.info(f"Discord sent: {text[:50]}...")
             return True
         else:
-            logger.error(f"Discord error: {response.status_code}")
+            logger.error(f"Discord error: {response.status_code} - {response.text}")
             return False
     except Exception as e:
         logger.error(f"Discord error: {e}")
