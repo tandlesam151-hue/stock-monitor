@@ -56,17 +56,31 @@ def scan():
         
         for symbol in WATCHLIST:
             try:
-                data = get_price(symbol)
-                if not data:
+                df = get_price(symbol)
+                if df is None or df.empty:
                     logger.warning(f"No data for {symbol}")
                     continue
 
+                # attach symbol metadata for downstream use
+                df.attrs['symbol'] = symbol
+
                 if POST_ALL_STOCKS_TO_DISCORD:
-                    snapshot_msg = format_stock_message(data)
+                    latest = df.iloc[-1]
+                    open_price = df.iloc[0]["Open"]
+                    snapshot = {
+                        'symbol': symbol,
+                        'open': round(open_price, 2),
+                        'current': round(latest['Close'], 2),
+                        'high': round(df['High'].max(), 2),
+                        'low': round(df['Low'].min(), 2),
+                        'volume': int(latest['Volume']),
+                        'pct_chg': round((latest['Close'] - open_price) / open_price * 100, 2),
+                    }
+                    snapshot_msg = format_stock_message(snapshot)
                     print(f"\nPosting snapshot for {symbol}:\n{snapshot_msg}\n")
                     send_discord(snapshot_msg)
-                
-                alerts = check_alerts(data)
+
+                alerts = check_alerts(df)
                 for msg in alerts:
                     print(f"\n{msg}\n")
                     send_telegram(msg)

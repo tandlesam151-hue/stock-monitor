@@ -124,27 +124,25 @@ def test_alert_engine():
     
     try:
         from alert_engine import check_alerts
-        
-        # Mock data for testing
-        mock_data = {
-            "symbol": "JUBLFOOD.NS",
-            "open": 100.0,
-            "current": 102.0,
-            "high": 103.0,
-            "low": 99.5,
-            "volume": 50000,
-            "pct_chg": 2.0  # 2% change (exceeds 1.5% threshold)
-        }
-        
-        alerts = check_alerts(mock_data)
+        import pandas as pd
+        import numpy as np
+
+        # Create a mock 5-min OHLCV DataFrame with 40 rows
+        idx = pd.date_range(end=pd.Timestamp.now(), periods=40, freq='5T')
+        prices = 100 + np.cumsum(np.random.normal(0, 0.2, size=len(idx)))
+        high = prices + np.random.uniform(0, 0.5, size=len(idx))
+        low = prices - np.random.uniform(0, 0.5, size=len(idx))
+        openp = prices + np.random.uniform(-0.2, 0.2, size=len(idx))
+        volume = np.random.randint(1000, 50000, size=len(idx))
+
+        mock_df = pd.DataFrame({'Open': openp, 'High': high, 'Low': low, 'Close': prices, 'Volume': volume}, index=idx)
+        mock_df.attrs['symbol'] = 'JUBLFOOD.NS'
+
+        alerts = check_alerts(mock_df)
         print(f"✓ check_alerts returned {len(alerts)} alert(s)")
-        
         if alerts:
-            print(f"✓ Alert message generated:")
             for alert in alerts:
                 print(f"  {alert}")
-        else:
-            print(f"⚠ No alerts generated (might be in cooldown)")
         
         # Test with no change
         mock_data_no_change = mock_data.copy()
@@ -198,21 +196,23 @@ def test_sample_stock_notification():
 
         symbol = WATCHLIST[0] if WATCHLIST else "HDFCBANK.NS"
         print(f"Fetching sample data for {symbol}...")
-        data = get_price(symbol)
-        
-        if not data:
+        df = get_price(symbol)
+
+        if df is None or df.empty:
             print(f"✗ No data retrieved for {symbol}")
             return False
-        
+
+        latest = df.iloc[-1]
+        open_price = df.iloc[0]['Open']
         sample_message = (
-            f"📈 Sample Stock Update: {data['symbol'].replace('.NS','')}\n"
+            f"📈 Sample Stock Update: {symbol.replace('.NS','')}\n"
             "```ini\n"
             "Symbol   | Price    | Open     | High     | Low      | Change\n"
             "---------|----------|----------|----------|----------|---------\n"
-            f"{data['symbol'].replace('.NS',''):<8} | ₹{data['current']:<7} | ₹{data['open']:<7} | ₹{data['high']:<7} | ₹{data['low']:<7} | {data['pct_chg']:+.2f}%\n"
+            f"{symbol.replace('.NS',''):<8} | ₹{latest['Close']:<7.2f} | ₹{open_price:<7.2f} | ₹{df['High'].max():<7.2f} | ₹{df['Low'].min():<7.2f} | {((latest['Close']-open_price)/open_price*100):+.2f}%\n"
             "```"
         )
-        
+
         print("Sending sample stock notification to Discord...")
         result = send_discord(sample_message)
         
@@ -241,17 +241,18 @@ def test_fetcher_offline():
         print("Testing fetcher with real API call (requires internet)...")
         print("Fetching data for HDFCBANK.NS...")
         
-        data = get_price("HDFCBANK.NS")
-        
-        if data:
-            print(f"✓ Data retrieved successfully:")
-            for key, value in data.items():
-                print(f"  {key}: {value}")
+        df = get_price("HDFCBANK.NS")
+
+        if df is not None and not df.empty:
+            print(f"✓ Data retrieved successfully: {len(df)} candles")
+            print(df.tail(1).to_dict('records')[0])
+            ok = True
         else:
-            print(f"✗ No data retrieved (market closed or API error)")
-        
+            print(f"✗ No data retrieved (market closed or API error) or insufficient candles")
+            ok = False
+
         print("\n")
-        return bool(data)
+        return ok
     except Exception as e:
         print(f"✗ Fetcher test failed: {e}\n")
         return False
