@@ -64,27 +64,14 @@ def scan():
                 # attach symbol metadata for downstream use
                 df.attrs['symbol'] = symbol
 
-                if POST_ALL_STOCKS_TO_DISCORD:
-                    latest = df.iloc[-1]
-                    open_price = df.iloc[0]["Open"]
-                    snapshot = {
-                        'symbol': symbol,
-                        'open': round(open_price, 2),
-                        'current': round(latest['Close'], 2),
-                        'high': round(df['High'].max(), 2),
-                        'low': round(df['Low'].min(), 2),
-                        'volume': int(latest['Volume']),
-                        'pct_chg': round((latest['Close'] - open_price) / open_price * 100, 2),
-                    }
-                    snapshot_msg = format_stock_message(snapshot)
-                    print(f"\nPosting snapshot for {symbol}:\n{snapshot_msg}\n")
-                    send_discord(snapshot_msg)
-
                 alerts = check_alerts(df)
-                for msg in alerts:
-                    print(f"\n{msg}\n")
-                    send_telegram(msg)
-                    send_discord(msg)
+                if alerts:
+                    for msg in alerts:
+                        print(f"\n{msg}\n")
+                        send_telegram(msg)
+                        send_discord(msg)
+                else:
+                    logger.debug(f"No alert for {symbol} at this time")
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
                 continue
