@@ -3,7 +3,7 @@ from datetime import datetime
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from config import WATCHLIST, MARKET_OPEN, MARKET_CLOSE, TIMEZONE, POST_ALL_STOCKS_TO_DISCORD, ALLOW_WEEKEND_RUN, ALLOW_ANYTIME
+from config import WATCHLIST, MARKET_OPEN, MARKET_CLOSE, TIMEZONE, POST_ALL_STOCKS_TO_DISCORD, ALLOW_WEEKEND_RUN, ALLOW_ANYTIME, DISCORD_WEBHOOK_URL
 from fetcher import get_price
 from alert_engine import check_alerts
 from notifier import send_telegram, send_discord
@@ -80,6 +80,10 @@ def scan():
 
 if __name__ == "__main__":
     init_db()
+    if DISCORD_WEBHOOK_URL and "YOUR" not in DISCORD_WEBHOOK_URL:
+        logger.info("Discord webhook appears configured")
+    else:
+        logger.warning("Discord webhook is not configured or looks invalid")
     scheduler = BlockingScheduler(timezone=IST)
     scheduler.add_job(scan, "interval", minutes=5, next_run_time=datetime.now(IST))
     logger.info("Stock monitor started, scanning every 5 minutes (first run now)...")

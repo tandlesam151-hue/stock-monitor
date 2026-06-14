@@ -1,8 +1,20 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file if it exists
-load_dotenv()
+# Load environment variables from .env file in this package directory if present
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+
+def _get_env(name: str, default: str = "") -> str:
+    """Read an environment variable and normalize quotes/whitespace."""
+    value = os.getenv(name, default)
+    if value is None:
+        return ""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        value = value[1:-1].strip()
+    return value
+
 
 WATCHLIST = ["JUBLFOOD.NS", "HDFCBANK.NS", "IEX.NS", "CIPLA.NS", "SUNPHARMA.NS", "ITC.NS", "VEDANTA.NS"]
 
@@ -14,12 +26,12 @@ ALERT_THRESHOLDS = {
 
 MARKET_OPEN  = "09:15"
 MARKET_CLOSE = "15:30"
-TIMEZONE     = os.getenv("TIMEZONE", "Asia/Kolkata")
+TIMEZONE     = _get_env("TIMEZONE", "Asia/Kolkata")
 POST_ALL_STOCKS_TO_DISCORD = False  # disable stock snapshot posting by default
 ALLOW_WEEKEND_RUN = True          # enabled for testing
 ALLOW_ANYTIME = True              # enabled for testing
 
 # Read credentials from environment variables (safer for different environments)
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "YOUR_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID")
-DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "YOUR_WEBHOOK_URL")
+TELEGRAM_TOKEN   = _get_env("TELEGRAM_TOKEN", "YOUR_BOT_TOKEN")
+TELEGRAM_CHAT_ID = _get_env("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID")
+DISCORD_WEBHOOK_URL = _get_env("DISCORD_WEBHOOK_URL", "YOUR_WEBHOOK_URL")
