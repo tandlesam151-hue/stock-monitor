@@ -6,6 +6,12 @@ Test script to validate all stock_monitor modules work correctly
 import sys
 import os
 
+# Ensure unicode (✓, emoji) prints correctly on Windows consoles (cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
+
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -128,7 +134,7 @@ def test_alert_engine():
         import numpy as np
 
         # Create a mock 5-min OHLCV DataFrame with 40 rows
-        idx = pd.date_range(end=pd.Timestamp.now(), periods=40, freq='5T')
+        idx = pd.date_range(end=pd.Timestamp.now(), periods=40, freq='5min')
         prices = 100 + np.cumsum(np.random.normal(0, 0.2, size=len(idx)))
         high = prices + np.random.uniform(0, 0.5, size=len(idx))
         low = prices - np.random.uniform(0, 0.5, size=len(idx))
@@ -143,13 +149,13 @@ def test_alert_engine():
         if alerts:
             for alert in alerts:
                 print(f"  {alert}")
-        
-        # Test with no change
-        mock_data_no_change = mock_data.copy()
-        mock_data_no_change["pct_chg"] = 0.5  # Less than 1.5% threshold
-        alerts2 = check_alerts(mock_data_no_change)
-        print(f"✓ Low change scenario: {len(alerts2)} alerts (should be 0)")
-        
+
+        # Test that too-few candles are rejected (engine requires >=30 rows)
+        small_df = mock_df.iloc[:10].copy()
+        small_df.attrs['symbol'] = 'JUBLFOOD.NS'
+        alerts2 = check_alerts(small_df)
+        print(f"✓ Insufficient-data scenario: {len(alerts2)} alerts (should be 0)")
+
         print("\n✓ Alert engine working!\n")
         return True
     except Exception as e:

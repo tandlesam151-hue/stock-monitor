@@ -19,7 +19,7 @@ def check_alerts(df: pd.DataFrame) -> List[str]:
     if df is None or df.empty or len(df) < 30:
         return messages
 
-    sym = getattr(df, 'symbol', None) or df.attrs.get('symbol') or 'UNKNOWN'
+    sym = df.attrs.get('symbol') or 'UNKNOWN'
     cool = ALERT_THRESHOLDS.get('cooldown_mins', 30)
 
     # Compute indicators and work on the augmented DataFrame

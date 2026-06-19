@@ -1,39 +1,44 @@
 import requests
 import logging
-import sys
+import asyncio
 from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL
 
 logger = logging.getLogger(__name__)
 
+
+def _run_async(coro) -> None:
+    """Run an async coroutine to completion regardless of loop state.
+
+    Uses asyncio.run when no loop is active. If called from within an existing
+    event loop, runs the coroutine in a dedicated thread so we still block until
+    it finishes (and any exception propagates).
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop in this thread: the simple, common case.
+        asyncio.run(coro)
+        return
+
+    # A loop is already running (e.g. called from async code): offload to a
+    # separate thread with its own loop and wait for the result.
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(asyncio.run, coro).result()
+
+
 def send_telegram(text: str) -> bool:
-    """Send message to Telegram (requires python-telegram-bot)."""
+    """Send a message to Telegram. Returns True on success, False otherwise."""
     if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "YOUR_BOT_TOKEN":
         logger.warning("Telegram token not configured")
         return False
     try:
         from telegram import Bot
-        import asyncio
-        
+
         bot = Bot(token=TELEGRAM_TOKEN)
-        
-        # Handle asyncio event loop properly across different platforms
-        if sys.platform == 'win32':
-            # Windows-specific handling for asyncio
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-            
-            if loop is None:
-                asyncio.run(bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text))
-            else:
-                # If there's already a running loop, create a task
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    executor.submit(asyncio.run, bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text))
-        else:
-            asyncio.run(bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text))
-        
+        _run_async(bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=text))
+
         logger.info(f"Telegram sent: {text[:50]}...")
         return True
     except ImportError:
@@ -57,7 +62,8 @@ def _normalize_webhook(url: str) -> str:
 def send_discord(text: str) -> bool:
     """Send message to Discord webhook."""
     webhook = _normalize_webhook(DISCORD_WEBHOOK_URL)
-    if not webhook or "YOUR" in webhook or not webhook.startswith("https://discord.com/api/webhooks/"):
+    valid_prefixes = ("https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/")
+    if not webhook or "YOUR" in webhook or not webhook.startswith(valid_prefixes):
         logger.warning("Discord webhook not configured or invalid")
         return False
     try:

@@ -6,6 +6,12 @@ import ast
 import sys
 import os
 
+# Ensure unicode (✓, emoji) prints correctly on Windows consoles (cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
+
 
 def validate_python_file(filepath):
     """Check if Python file has valid syntax"""

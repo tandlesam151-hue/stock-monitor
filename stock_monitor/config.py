@@ -1,8 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file in this package directory if present
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+# Load environment variables from both the workspace root and package directory if present
+load_dotenv(os.path.join(os.getcwd(), ".env"), override=False)
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
 
 def _get_env(name: str, default: str = "") -> str:
