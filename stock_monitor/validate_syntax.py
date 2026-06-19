@@ -33,6 +33,8 @@ def main():
     files = [
         "config.py",
         "fetcher.py",
+        "indicators.py",
+        "patterns.py",
         "alert_engine.py",
         "notifier.py",
         "state.py",

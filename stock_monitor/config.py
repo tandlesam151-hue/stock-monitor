@@ -17,7 +17,7 @@ def _get_env(name: str, default: str = "") -> str:
     return value
 
 
-WATCHLIST = ["JUBLFOOD.NS", "HDFCBANK.NS", "IEX.NS", "CIPLA.NS", "SUNPHARMA.NS", "ITC.NS", "VEDANTA.NS"]
+WATCHLIST = ["JUBLFOOD.NS", "HDFCBANK.NS", "IEX.NS", "CIPLA.NS", "SUNPHARMA.NS", "ITC.NS", "VEDL.NS"]
 
 ALERT_THRESHOLDS = {
     "pct_move"      : 1.5,   # alert if price moves ±1.5% from day open
@@ -28,7 +28,6 @@ ALERT_THRESHOLDS = {
 MARKET_OPEN  = "09:15"
 MARKET_CLOSE = "15:30"
 TIMEZONE     = _get_env("TIMEZONE", "Asia/Kolkata")
-POST_ALL_STOCKS_TO_DISCORD = False  # disable stock snapshot posting by default
 ALLOW_WEEKEND_RUN = True          # enabled for testing
 ALLOW_ANYTIME = True              # enabled for testing
 
