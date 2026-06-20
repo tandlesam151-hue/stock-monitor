@@ -35,3 +35,27 @@ ALLOW_ANYTIME = True              # enabled for testing
 TELEGRAM_TOKEN   = _get_env("TELEGRAM_TOKEN", "YOUR_BOT_TOKEN")
 TELEGRAM_CHAT_ID = _get_env("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID")
 DISCORD_WEBHOOK_URL = _get_env("DISCORD_WEBHOOK_URL", "YOUR_WEBHOOK_URL")
+
+
+# --- PostgreSQL / TimescaleDB ----------------------------------------------
+# Connection settings for the Postgres+TimescaleDB backend. Defaults match a
+# local WSL install; override via .env for other environments.
+DB_HOST     = _get_env("DB_HOST", "127.0.0.1")
+DB_PORT     = _get_env("DB_PORT", "5432")
+DB_NAME     = _get_env("DB_NAME", "stock_monitor")
+DB_USER     = _get_env("DB_USER", "stockbot")
+DB_PASSWORD = _get_env("DB_PASSWORD", "")
+
+
+def _as_bool(value: str, default: bool = True) -> bool:
+    """Interpret common truthy/falsey string values from the environment."""
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+# Persistence toggles: when enabled, every scan writes the 5-min OHLCV bars and
+# the scored signal snapshot to TimescaleDB hypertables (builds history for
+# later analysis/backtesting). Disable to run without writing time-series data.
+PERSIST_OHLCV   = _as_bool(_get_env("PERSIST_OHLCV", "true"))
+PERSIST_SIGNALS = _as_bool(_get_env("PERSIST_SIGNALS", "true"))

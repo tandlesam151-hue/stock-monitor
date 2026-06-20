@@ -3,6 +3,8 @@ from typing import List, Optional
 
 import pandas as pd
 
+import config
+import db
 from config import ALERT_THRESHOLDS
 from state import can_alert, record_alert
 from indicators import compute_all
@@ -218,6 +220,17 @@ def check_alerts(df: pd.DataFrame) -> List[str]:
         return messages
 
     sym = res['symbol']
+
+    # Persist the full analysis snapshot for every scan (independent of whether
+    # an alert fires) so we build a signals history for later analysis.
+    if config.PERSIST_SIGNALS:
+        try:
+            ts = df.index[-1]
+            ts = ts.to_pydatetime() if hasattr(ts, 'to_pydatetime') else ts
+            db.insert_signal(sym, ts, res)
+        except Exception as e:
+            logger.error(f"Signal persistence failed for {sym}: {e}")
+
     if res['direction'] == 'NEUTRAL' or res['score'] < MIN_SCORE:
         logger.debug(
             f"No decisive signal for {sym}: dir={res['direction']} score={res['score']}"
