@@ -8,7 +8,7 @@ import db
 logger = logging.getLogger(__name__)
 
 
-def get_price(symbol: str) -> pd.DataFrame | None:
+def get_price(symbol: str) -> "pd.DataFrame | None":
     """Fetch full 5-min OHLCV dataframe for the current day using yfinance.
 
     Returns None if no data or fewer than 30 candles (insufficient for indicators).

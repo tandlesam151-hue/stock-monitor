@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import List, Optional
 
 import pandas as pd
@@ -209,12 +210,133 @@ def _format_message(res: dict) -> str:
     return "\n".join(lines)
 
 
-def check_alerts(df: pd.DataFrame) -> List[str]:
-    """Return alert messages when a decisive, high-conviction signal fires.
+# Embed accent colors (Discord integer RGB). Weak conviction is amber
+# regardless of direction so a low-confidence card never looks like a
+# strong call.
+_COLOR_BULL = 0x2ECC71   # green
+_COLOR_BEAR = 0xE74C3C   # red
+_COLOR_WEAK = 0xF1C40F   # amber
 
-    Expects a 5-min OHLCV dataframe for the day with at least 30 rows.
+
+def _confidence_bar(confidence: int, slots: int = 10) -> str:
+    """Render a 0-100 confidence value as a block-character progress bar."""
+    filled = int(round(confidence / 100 * slots))
+    filled = max(0, min(slots, filled))
+    return "█" * filled + "░" * (slots - filled)
+
+
+def _risk_reward(res: dict) -> Optional[float]:
+    """Compute the reward:risk ratio from the ATR-based levels, if available."""
+    levels = res.get("levels")
+    if not levels:
+        return None
+    price = res["price"]
+    stop = levels["stop"]
+    t1 = levels["t1"]
+    risk = abs(price - stop)
+    reward = abs(t1 - price)
+    if risk <= 0:
+        return None
+    return reward / risk
+
+
+def _tradingview_url(symbol: str) -> Optional[str]:
+    """Map an NSE yfinance symbol (e.g. HDFCBANK.NS) to a TradingView chart URL."""
+    if not isinstance(symbol, str):
+        return None
+    if symbol.endswith(".NS"):
+        base = symbol[:-3]
+        return f"https://www.tradingview.com/symbols/NSE-{base}/"
+    return None
+
+
+def _build_embed(res: dict) -> dict:
+    """Build a rich Discord embed from an analysis result.
+
+    Surfaces direction, price/change, a confidence bar, the bull-vs-bear
+    conviction split, risk/reward, the firing signals and the ATR levels —
+    color-coded by direction (amber when conviction is WEAK).
     """
-    messages: List[str] = []
+    sym = res["symbol"]
+    symbol_text = sym.replace(".NS", "") if isinstance(sym, str) else "UNKNOWN"
+    is_bull = res["direction"] == "BULL"
+    dir_text = "BULLISH" if is_bull else "BEARISH"
+    dir_emoji = "🐂" if is_bull else "🐻"
+
+    if res["level"] == "WEAK":
+        color = _COLOR_WEAK
+    else:
+        color = _COLOR_BULL if is_bull else _COLOR_BEAR
+
+    change = res["change_pct"]
+    change_arrow = "🔺" if change >= 0 else "🔻"
+
+    fields = [
+        {"name": "Price", "value": f"₹{res['price']:.2f}", "inline": True},
+        {"name": "Change", "value": f"{change_arrow} {change:+.2f}%", "inline": True},
+        {
+            "name": "Confidence",
+            "value": f"`{_confidence_bar(res['confidence'])}` {res['confidence']}/100",
+            "inline": True,
+        },
+        {
+            "name": "Conviction",
+            "value": f"🐂 {res['bull_score']}  ⚔️  🐻 {res['bear_score']}",
+            "inline": True,
+        },
+    ]
+
+    rr = _risk_reward(res)
+    if rr is not None:
+        fields.append({"name": "Risk / Reward", "value": f"1 : {rr:.2f}", "inline": True})
+
+    # Firing signals (the ones backing the dominant direction).
+    passed = res.get("passed") or []
+    if passed:
+        firing = "\n".join(f"• {s['name']} — {s['detail']} (+{s['points']})" for s in passed)
+    else:
+        firing = "_None_"
+    fields.append({"name": f"✅ Signals Firing ({len(passed)})", "value": firing, "inline": False})
+
+    # Opposing signals give context for the conviction split.
+    opp_dir = "BEAR" if is_bull else "BULL"
+    opposing = [s for s in res.get("signals", []) if s["direction"] == opp_dir]
+    if opposing:
+        opp_text = "\n".join(f"• {s['name']} — {s['detail']} (-{s['points']})" for s in opposing)
+        fields.append({"name": f"⚠️ Opposing ({len(opposing)})", "value": opp_text, "inline": False})
+
+    levels = res.get("levels")
+    if levels:
+        lvl_text = (
+            f"Stop ₹{levels['stop']:.2f} · "
+            f"T1 ₹{levels['t1']:.2f} · "
+            f"T2 ₹{levels['t2']:.2f}"
+        )
+    else:
+        lvl_text = "Not available (ATR N/A)"
+    fields.append({"name": "🎯 Levels (ATR-based)", "value": lvl_text, "inline": False})
+
+    embed = {
+        "title": f"{dir_emoji} {symbol_text} — {dir_text} ({res['level']})",
+        "color": color,
+        "fields": fields,
+        "footer": {"text": "Stock Monitor • 5m scan"},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    url = _tradingview_url(sym)
+    if url:
+        embed["url"] = url
+    return embed
+
+
+def check_alerts(df: pd.DataFrame) -> List[dict]:
+    """Return alert payloads when a decisive, high-conviction signal fires.
+
+    Each payload is a dict with a ``text`` rendering (for Telegram / fallback)
+    and a Discord ``embed`` dict. Expects a 5-min OHLCV dataframe for the day
+    with at least 30 rows.
+    """
+    messages: List[dict] = []
     res = analyze(df)
     if res is None:
         return messages
@@ -243,7 +365,7 @@ def check_alerts(df: pd.DataFrame) -> List[str]:
         logger.info(f"In cooldown for {sym} alert type {atype}")
         return messages
 
-    messages.append(_format_message(res))
+    messages.append({"text": _format_message(res), "embed": _build_embed(res)})
     record_alert(sym, atype)
     logger.info(
         f"Alert for {sym}: {res['direction']} score={res['score']} conf={res['confidence']}"

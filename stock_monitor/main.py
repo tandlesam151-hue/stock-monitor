@@ -47,12 +47,14 @@ def scan():
 
                 alerts = check_alerts(df)
                 if alerts:
-                    for msg in alerts:
+                    for payload in alerts:
                         logger.info(f"Alert triggered for {symbol}")
-                        logger.debug(msg)
-                        if not send_telegram(msg):
+                        text = payload["text"]
+                        embed = payload.get("embed")
+                        logger.debug(text)
+                        if not send_telegram(text):
                             logger.error(f"Telegram notification failed for {symbol}")
-                        if not send_discord(msg):
+                        if not send_discord(text, embed=embed):
                             logger.error(f"Discord notification failed for {symbol}")
                 else:
                     logger.info(f"No alert triggered for {symbol}")

@@ -1,0 +1,17 @@
+Collecting requests
+  Using cached requests-2.32.5-py3-none-any.whl (64 kB)
+Collecting charset_normalizer<4,>=2
+  Using cached charset_normalizer-3.4.7-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (208 kB)
+Collecting idna<4,>=2.5
+  Downloading idna-3.18-py3-none-any.whl (65 kB)
+Collecting urllib3<3,>=1.21.1
+  Downloading urllib3-2.6.3-py3-none-any.whl (131 kB)
+Collecting certifi>=2017.4.17
+  Using cached certifi-2026.6.17-py3-none-any.whl (133 kB)
+Installing collected packages: urllib3, idna, charset-normalizer, certifi, requests
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+awscli 2.33.15 requires python-dateutil<=2.9.0,>=2.1, but you have python-dateutil 2.9.0.post0 which is incompatible.
+Successfully installed certifi-2026.6.17 charset-normalizer-3.4.7 idna-3.18 requests-2.32.5 urllib3-2.6.3
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+WARNING: You are using pip version 21.3.1; however, version 26.0.1 is available.
+You should consider upgrading via the '/usr/bin/python3 -m pip install --upgrade pip' command.

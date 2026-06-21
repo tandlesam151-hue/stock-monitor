@@ -59,16 +59,25 @@ def _normalize_webhook(url: str) -> str:
     return normalized
 
 
-def send_discord(text: str) -> bool:
-    """Send message to Discord webhook."""
+def send_discord(text: str, embed: dict = None) -> bool:
+    """Send a message to a Discord webhook.
+
+    If ``embed`` is provided, it is sent as a rich embed card and ``text`` is
+    omitted from the payload (the embed carries all the detail). Otherwise the
+    plain ``text`` is sent as message content.
+    """
     webhook = _normalize_webhook(DISCORD_WEBHOOK_URL)
     valid_prefixes = ("https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/")
     if not webhook or "YOUR" in webhook or not webhook.startswith(valid_prefixes):
         logger.warning("Discord webhook not configured or invalid")
         return False
     try:
-        response = requests.post(webhook, json={"content": text}, timeout=5)
-        if response.status_code == 204:
+        if embed is not None:
+            payload = {"embeds": [embed]}
+        else:
+            payload = {"content": text}
+        response = requests.post(webhook, json=payload, timeout=5)
+        if response.status_code in (200, 204):
             logger.info(f"Discord sent: {text[:50]}...")
             return True
         else:
