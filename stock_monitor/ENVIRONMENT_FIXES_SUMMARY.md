@@ -1,3 +1,9 @@
+> **Historical document.** Describes the one-time cross-environment fixes applied
+> to the original SQLite-based version (env-var credentials, absolute DB path,
+> Windows asyncio handling, etc.). The storage layer has since moved to
+> PostgreSQL + TimescaleDB. For current setup and behaviour see `SETUP.md` and
+> `QUICK_START.md`; this file is retained only for context.
+
 # Environment Compatibility Fixes - Implementation Summary
 
 ## Overview

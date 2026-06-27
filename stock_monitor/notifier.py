@@ -28,10 +28,25 @@ def _run_async(coro) -> None:
         executor.submit(asyncio.run, coro).result()
 
 
+def telegram_configured() -> bool:
+    """True only when both a real bot token and chat id are present.
+
+    Lets callers distinguish "Telegram intentionally not set up" (a benign skip)
+    from "configured but the send failed" (a real error worth logging).
+    """
+    return (
+        bool(TELEGRAM_TOKEN)
+        and TELEGRAM_TOKEN != "YOUR_BOT_TOKEN"
+        and bool(TELEGRAM_CHAT_ID)
+        and TELEGRAM_CHAT_ID != "YOUR_CHAT_ID"
+    )
+
+
 def send_telegram(text: str) -> bool:
     """Send a message to Telegram. Returns True on success, False otherwise."""
-    if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "YOUR_BOT_TOKEN":
-        logger.warning("Telegram token not configured")
+    if not telegram_configured():
+        # Optional channel not set up: not an error, just nothing to do.
+        logger.debug("Telegram not configured; skipping send")
         return False
     try:
         from telegram import Bot

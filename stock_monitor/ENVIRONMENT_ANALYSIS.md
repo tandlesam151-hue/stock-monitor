@@ -1,3 +1,9 @@
+> **Historical document.** This captures the one-time analysis of the original
+> SQLite-based, hardcoded-credentials version of the app and the cross-environment
+> migration that followed. The app has since moved to PostgreSQL + TimescaleDB
+> with environment-driven configuration. For current setup and behaviour see
+> `SETUP.md` and `QUICK_START.md`; this file is retained only for context.
+
 # Environment Compatibility Analysis - stock_monitor
 
 ## Issues Found

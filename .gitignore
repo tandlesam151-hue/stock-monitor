@@ -38,3 +38,6 @@ monitor.db
 .DS_Store
 Thumbs.db
 *.log
+
+# Runtime artifacts
+*.pid

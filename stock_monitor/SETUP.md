@@ -1,114 +1,169 @@
 # Stock Monitor Setup Guide
 
+Intraday NSE signal monitor. Every 5 minutes it fetches the latest session's
+5-min OHLCV bars for each watchlist symbol, computes a weighted bull/bear
+signal score, overlays daily-timeframe context (trend regime plus floor-pivot
+support/resistance), and sends Discord/Telegram alerts on high-conviction
+setups. Alerts carry both ATR-based and structure-based (pivot) stop/target
+levels. Time-series data is persisted to PostgreSQL + TimescaleDB.
+
+## Requirements
+
+- Python 3.9+
+- PostgreSQL 14+ with the **TimescaleDB** extension available
+- Network access to Yahoo Finance (via `yfinance`)
+
 ## Installation
 
-1. **Install dependencies:**
+1. **Install Python dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Configure credentials using environment variables:**
-   - **Option A: Using .env file (Recommended for local development)**
-     ```bash
-     cp .env.example .env
-     ```
-     Then edit `.env` and fill in your credentials:
-     - **Discord Webhook:** Get from Discord Developer Portal
-     - **Telegram Bot:** Get token from BotFather, get chat ID from bot
-   
-   - **Option B: Using system environment variables (For production/Docker)**
-     ```bash
-     export TELEGRAM_TOKEN="your_bot_token"
-     export TELEGRAM_CHAT_ID="your_chat_id"
-     export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
-     ```
+2. **Set up the database** (creates the `stockbot` role, the `stock_monitor`
+   database, and enables TimescaleDB):
+   ```bash
+   sudo -u postgres psql -f db_setup.sql
+   ```
+   Change the default role password in `db_setup.sql` before running it in any
+   non-local environment, and use the same value for `DB_PASSWORD` below.
 
-3. **Run the monitor:**
+   The application tables (`alerts`, plus the `ohlcv` and `signals`
+   hypertables) are created automatically at first run by `db.init_schema()` —
+   you do not create them by hand.
+
+3. **Configure credentials and connection** via environment variables. Copy the
+   template and edit it:
+   ```bash
+   cp .env.example .env
+   ```
+   `.env` keys:
+   ```ini
+   # Notifications
+   TELEGRAM_TOKEN=your_bot_token          # optional
+   TELEGRAM_CHAT_ID=your_chat_id          # optional
+   DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+
+   # Timezone (defaults to Asia/Kolkata)
+   TIMEZONE=Asia/Kolkata
+
+   # PostgreSQL + TimescaleDB
+   DB_HOST=127.0.0.1
+   DB_PORT=5432
+   DB_NAME=stock_monitor
+   DB_USER=stockbot
+   DB_PASSWORD=your_db_password
+
+   # Persistence toggles (true/false)
+   PERSIST_OHLCV=true
+   PERSIST_SIGNALS=true
+
+   # Market-hours gating (see "Market hours" below)
+   ALLOW_ANYTIME=false
+   ALLOW_WEEKEND_RUN=false
+   ```
+   Environment variables also work without a `.env` file (e.g. exported in the
+   shell, or set by your process manager / container platform).
+
+4. **(Optional) Backfill history** — load the last 30 days of 5-min bars into
+   the `ohlcv` hypertable:
+   ```bash
+   python backfill_30d.py
+   ```
+
+5. **Run the monitor:**
    ```bash
    python main.py
    ```
 
-   Or from anywhere in the system (works from any directory):
-   ```bash
-   cd /path/to/stock_monitor && python main.py
-   ```
+## Running under cron (production)
 
-## Features
+The monitor is designed to run only during NSE trading hours. `monitor_ctl.sh`
+starts/stops it and tracks the PID, and `/etc/cron.d/stock-monitor` drives the
+schedule. Times in cron are UTC; the NSE window 09:00–15:30 IST maps to
+03:30–10:00 UTC, Monday–Friday:
 
-- **Real-time Stock Monitoring:** Tracks NSE stocks with 5-minute candles
-- **Price Alerts:** Triggers on 1.5% price movement or 1% candle body
-- **Cooldown System:** Prevents alert spam (30-minute default cooldown)
-- **Discord Integration:** Sends alerts to Discord webhook
-- **Telegram Integration:** Optional - sends alerts to Telegram bot
-- **Market Hours Check:** Only runs during market hours (09:15 - 15:30 IST)
-- **Logging:** Full logging for debugging
-- **Cross-Environment Support:** Works on Windows, macOS, and Linux
+```cron
+30 3 * * 1-5 root /data/github/stock-monitor/stock_monitor/monitor_ctl.sh start
+0 10 * * 1-5 root /data/github/stock-monitor/stock_monitor/monitor_ctl.sh stop
+```
 
-## Configuration
+Manual control:
+```bash
+./monitor_ctl.sh start   # launch main.py if not already running
+./monitor_ctl.sh stop    # stop the running monitor
+```
+Logs are appended to `monitor.log`.
 
-Edit `config.py` to customize:
-- `WATCHLIST`: Add/remove stock symbols (NSE format: `SYMBOL.NS`)
-- `ALERT_THRESHOLDS`: Adjust thresholds and cooldown
-- `MARKET_OPEN/MARKET_CLOSE`: Change trading hours
-- `TIMEZONE`: Change timezone (defaults to Asia/Kolkata)
+## Market hours
 
-Credentials are now read from environment variables:
-- `TELEGRAM_TOKEN`: Your Telegram bot token
-- `TELEGRAM_CHAT_ID`: Your Telegram chat ID
-- `DISCORD_WEBHOOK_URL`: Your Discord webhook URL
-- `TIMEZONE`: Optional timezone override (defaults to Asia/Kolkata)
+`main.py` has an in-app guard, `is_market_open()`, controlled by two settings
+(read from the environment, see `config.py`):
+
+- `ALLOW_ANYTIME` — when `true`, scans run regardless of time (useful for
+  testing). Defaults to `false`.
+- `ALLOW_WEEKEND_RUN` — when `true`, allows scans on Saturday/Sunday. Defaults
+  to `false`.
+
+In production both default to `false`, so the app self-limits to the
+`MARKET_OPEN`–`MARKET_CLOSE` window on weekdays even if it is left running. For
+ad-hoc testing outside market hours, set `ALLOW_ANYTIME=true` in `.env`.
+
+## Configuration reference (`config.py`)
+
+- `WATCHLIST` — NSE symbols to track (yfinance format: `SYMBOL.NS`).
+- `ALERT_THRESHOLDS` — tuning knobs and the alert cooldown window.
+- `MARKET_OPEN` / `MARKET_CLOSE` — trading-hours window (IST).
+- `TIMEZONE` — defaults to `Asia/Kolkata`.
+- `PERSIST_OHLCV` / `PERSIST_SIGNALS` — toggle time-series writes.
+- `DB_*` — Postgres connection settings.
 
 ## Database
 
-- Stores alert history in `monitor.db` (stored in stock_monitor directory)
-- Tracks last alert time for each symbol/type to enforce cooldowns
-- Automatically created on first run
-- Works correctly regardless of where the script is run from
+PostgreSQL + TimescaleDB. Three stores, created by `db.init_schema()`:
 
-## Validation & Testing
+- `alerts` — alert-cooldown bookkeeping (regular table).
+- `ohlcv` — 5-min OHLCV bars per symbol (hypertable, partitioned on `ts`).
+- `signals` — scored analysis snapshot per scan (hypertable, partitioned on `ts`).
 
-Run syntax validation:
+A legacy SQLite `monitor.db` is no longer used. If you are upgrading from the
+old SQLite version, `migrate_sqlite.py` ports existing alert-cooldown rows into
+Postgres.
+
+## Validation & testing
+
 ```bash
-python validate_syntax.py
-```
-
-Run comprehensive tests:
-```bash
-python test_all.py
+python validate_syntax.py            # syntax check of core modules
+python test_fetch_and_scoring.py     # deterministic fetch + scoring tests
+python test_all.py                   # broader integration checks (hits Discord/yfinance)
+python send_discord_test.py          # send a single test message to Discord
 ```
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| `No module named 'yfinance'` | Run `pip install -r requirements.txt` |
-| `Credentials not found` | Check `.env` file exists or set environment variables |
-| `No module named 'dotenv'` | Run `pip install python-dotenv` |
-| `Database errors` | Delete `monitor.db` and restart (will recreate) |
-
-## Cross-Environment Deployment
-
-This application now works consistently across different environments:
-
-✓ **Works from any directory** - Database path is absolute
-✓ **Credentials from env vars** - Supports .env files and system variables
-✓ **Cross-platform asyncio** - Fixed Windows event loop issues
-✓ **Portable validation scripts** - validate_syntax.py works from anywhere
-| Discord alerts not working | Verify webhook URL is valid in config.py |
-| Telegram alerts not working | Update token and chat ID in config.py |
-| No alerts triggering | Check market hours and price movement thresholds |
-| Database locked | Stop the monitor and try again |
+| `No module named 'yfinance'` / `psycopg` | `pip install -r requirements.txt` |
+| `connection refused` / DB errors | Confirm Postgres is running and `DB_*` in `.env` are correct |
+| `extension "timescaledb" is not available` | Install the TimescaleDB package for your Postgres version, then re-run `db_setup.sql` |
+| `possibly delisted; no price data found` | Transient yfinance/Yahoo issue; the fetcher already falls back to the most recent available session |
+| No alerts firing | Check it is within market hours (or set `ALLOW_ANYTIME=true`) and that signals are clearing `MIN_SCORE` |
+| Discord alerts not working | Verify `DISCORD_WEBHOOK_URL` is a valid webhook URL |
 
 ## Files
 
-- `main.py` - Main scheduler and scanner
-- `config.py` - Configuration (tokens, symbols, thresholds)
-- `fetcher.py` - Fetch stock prices via yfinance
-- `alert_engine.py` - Check price thresholds and generate alerts
-- `notifier.py` - Send alerts to Discord/Telegram
-- `state.py` - SQLite state management
-- `monitor.db` - Alert history database (auto-created)
-
----
-
-**Last Updated:** June 7, 2026
+- `main.py` — scheduler and scan loop
+- `fetcher.py` — yfinance OHLCV fetch (latest-session slice)
+- `indicators.py` — RSI, Bollinger, MACD, EMA, ATR, VWAP, volume ratio
+- `patterns.py` — candlestick and breakout detection
+- `context.py` — daily-timeframe context (no-lookahead): trend regime, prior-day
+  and 20-day swing levels, floor pivots (R1/R2/S1/S2), daily ATR, avg volume
+- `alert_engine.py` — scoring, daily-context confidence adjustment, ATR- and
+  pivot-based levels, alert formatting, Discord embed
+- `notifier.py` — Discord/Telegram delivery
+- `db.py` — Postgres/TimescaleDB access layer and schema bootstrap
+- `state.py` — alert-cooldown API (thin shim over `db.py`)
+- `config.py` — configuration from environment
+- `backfill_30d.py` — one-off 30-day OHLCV backfill
+- `migrate_sqlite.py` — one-off SQLite→Postgres alert migration
+- `monitor_ctl.sh` — start/stop control script for cron

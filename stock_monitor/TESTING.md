@@ -1,193 +1,96 @@
 # Testing Guide for Stock Monitor
 
-## Quick Test Methods
+## Test entry points
 
-### 1️⃣ **Syntax Validation (Fastest)**
-Check if Python files have valid syntax without running them.
-
+### 1. Syntax validation (fastest)
 ```bash
 python validate_syntax.py
 ```
+Parses each core module and reports syntax errors. No imports executed, no
+network or DB needed.
 
-**Expected Output:**
+### 2. Deterministic fetch + scoring tests
+```bash
+python test_fetch_and_scoring.py
 ```
-✓ config.py            - OK
-✓ fetcher.py           - OK
-✓ alert_engine.py      - OK
-✓ notifier.py          - OK
-✓ state.py             - OK
-✓ main.py              - OK
+The most useful suite for verifying behaviour. It pins down concrete answers
+(no random data) and needs no database — DB persistence is toggled off inside
+the relevant tests. Coverage:
 
-✓ All files have valid Python syntax!
-```
+- fetcher session-slicing (`_latest_session`) and column normalization
+- breakout detector → BULL above range / BEAR below range
+- candlestick detector → bullish marubozu
+- `compute_all` populates every indicator column with finite values
+- `analyze()` returns None below 30 candles
+- `analyze()` direction is consistent with the bull/bear score split
+- a forced-BULL scenario scores BULL
+- daily context: regime detection, no-lookahead cutoff, and confidence
+  alignment boost / contradiction penalty (with the trend filter suppressing
+  signals that fight the daily trend)
+- floor pivots: correct math + ordering, no-lookahead, structure-based
+  stop/target levels, and the support/resistance confidence nudge (including
+  ATR-scaled tolerance and breakout de-duplication)
+- `check_alerts()` emits nothing on neutral data
+- a live fetch smoke test (skipped gracefully if offline)
 
----
+Expected: `30 passed, 0 failed` online (the two live smoke tests self-skip when
+offline, e.g. `28 passed, 0 failed, 2 skipped`).
 
-### 2️⃣ **Full Integration Test**
-Runs comprehensive tests for all modules, including Discord notifications.
-
+### 3. Broader integration checks
 ```bash
 python test_all.py
 ```
+Exercises imports, config, the DB-backed cooldown state, the alert engine, and
+**sends real Discord test messages** plus a live yfinance call. Requires a
+configured `.env`, a reachable Postgres, and network access.
 
-**What it tests:**
-- ✓ Module imports
-- ✓ Configuration loading
-- ✓ Database initialization
-- ✓ State management (cooldown logic)
-- ✓ Alert engine with mock data
-- ✓ Discord webhook connection
-- ✓ Live API call to fetch stock price (takes ~5-10 seconds)
-
-**Expected Result:** 6/6 tests passed ✓
-
----
-
-### 3️⃣ **Individual Module Testing**
-
-#### Test Imports Only
+### 4. Send a single Discord test message
 ```bash
-python -c "from config import *; from fetcher import *; from alert_engine import *; from notifier import *; from state import *; print('✓ All imports OK')"
+python send_discord_test.py
 ```
 
-#### Test Config
+## Targeted one-liners
+
+Imports:
 ```bash
-python -c "from config import WATCHLIST, DISCORD_WEBHOOK_URL; print('Watchlist:', WATCHLIST); print('Discord configured:', bool(DISCORD_WEBHOOK_URL))"
+python -c "import config, fetcher, indicators, patterns, alert_engine, notifier, state, db; print('imports OK')"
 ```
 
-#### Test Database
+Config:
 ```bash
-python -c "from state import init_db; init_db(); print('✓ Database initialized')"
+python -c "from config import WATCHLIST, DISCORD_WEBHOOK_URL; print('Watchlist:', WATCHLIST); print('Discord configured:', 'YOUR' not in DISCORD_WEBHOOK_URL)"
 ```
 
-#### Test Alert Engine Logic
+Database connectivity + schema:
 ```bash
-python -c "
-from alert_engine import check_alerts
-
-data = {
-    'symbol': 'TEST.NS',
-    'open': 100.0,
-    'current': 102.5,
-    'high': 103.0,
-    'low': 99.5,
-    'volume': 50000,
-    'pct_chg': 2.5  # 2.5% change (exceeds 1.5% threshold)
-}
-
-alerts = check_alerts(data)
-print(f'Alerts generated: {len(alerts)}')
-for alert in alerts:
-    print(alert)
-"
+python -c "import db; db.init_schema(); print('DB OK')"
 ```
 
-#### Test Discord Notification
-```bash
-python -c "
-from notifier import send_discord
-
-message = '🧪 Test Alert: Stock Monitor is working!'
-result = send_discord(message)
-print('Discord test:', '✓ Success' if result else '✗ Failed')
-"
-```
-
----
-
-### 4️⃣ **Dry-Run Without Scheduling**
-Test the main scanner logic without the scheduler:
-
+End-to-end on one symbol (note: `check_alerts` takes a **DataFrame**, which
+`get_price` returns — not a plain dict):
 ```bash
 python -c "
 from config import WATCHLIST
 from fetcher import get_price
-from alert_engine import check_alerts
-from notifier import send_discord
-from state import init_db
+from alert_engine import check_alerts, analyze
 
-init_db()
-
-# Test with first symbol
 symbol = WATCHLIST[0]
-print(f'Testing with {symbol}...')
-
-data = get_price(symbol)
-if data:
-    print(f'✓ Got price data: {data}')
-    alerts = check_alerts(data)
-    print(f'✓ Alerts: {len(alerts)}')
-    if alerts:
-        send_discord(alerts[0])
+df = get_price(symbol)
+if df is None or df.empty:
+    print('No price data (no recent session / offline)')
 else:
-    print('✗ No price data (market closed?)')
+    df.attrs['symbol'] = symbol
+    res = analyze(df)
+    print(f'{symbol}: dir={res[\"direction\"]} score={res[\"score\"]} conf={res[\"confidence\"]}')
+    print('alerts:', len(check_alerts(df)))
 "
 ```
 
----
-
-### 5️⃣ **Check Dependencies**
-Verify all required packages are installed:
-
-```bash
-pip show yfinance requests pytz apscheduler
-```
-
-If any package is missing, install them:
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Troubleshooting Tests
-
-| Issue | Solution |
-|-------|----------|
-| `ModuleNotFoundError: No module named 'yfinance'` | Run `pip install -r requirements.txt` |
-| `Discord test returns False` | Check Discord webhook URL in config.py |
-| `API test takes too long` | Normal - yfinance takes 5-10 seconds. Market data only available during trading hours |
-| `Database locked error` | Delete `monitor.db` and try again: `rm monitor.db` |
-| `Tests show "DeprecationWarning"` | Warnings are OK, not errors |
-
----
-
-## How to Know Everything is Working ✓
-
-✅ `validate_syntax.py` - All files pass syntax check  
-✅ `test_all.py` - All 6 tests pass  
-✅ Discord notification test sends a message to your Discord  
-✅ No import errors when running Python scripts  
-✅ Database initializes without errors  
-
-## Recommended Testing Flow
-
-1. **First time setup:**
-   ```bash
-   pip install -r requirements.txt
-   python validate_syntax.py
-   ```
-
-2. **Before running main.py:**
-   ```bash
-   python test_all.py
-   ```
-
-3. **If tests pass, run the monitor:**
-   ```bash
-   python main.py
-   ```
-
----
-
 ## Notes
 
-- Tests don't require market to be open (except API test)
-- Discord test sends an actual test message
-- Database tests use real SQLite operations
-- Alert engine uses mock data (doesn't affect real alerts)
-- No credentials exposed in test output
-
----
-
-**Last Updated:** June 7, 2026
+- `test_fetch_and_scoring.py` is the source of truth for fetch/scoring logic and
+  needs no DB or network (the one live test self-skips).
+- `test_all.py` and `send_discord_test.py` produce real side effects (Discord
+  messages, DB writes) and need a configured environment.
+- The market does not need to be open to run the tests; the live fetch falls
+  back to the most recent available session.
