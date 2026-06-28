@@ -32,6 +32,24 @@ levels. Time-series data is persisted to PostgreSQL + TimescaleDB.
    hypertables) are created automatically at first run by `db.init_schema()` —
    you do not create them by hand.
 
+   **First-time cluster bootstrap (RHEL/Rocky/Alma — skip if your cluster is
+   already initialized and running).** On Debian/Ubuntu the cluster is created
+   and started by the package install; on RHEL family it is not. There you must
+   initialize, enable the TimescaleDB preload, allow password auth for local TCP
+   connections, and start the service *before* running `db_setup.sql`:
+   ```bash
+   sudo /usr/bin/postgresql-setup --initdb                      # create the cluster
+   # Enable the TimescaleDB shared library (required for CREATE EXTENSION):
+   echo "shared_preload_libraries = 'timescaledb'" | sudo tee -a /var/lib/pgsql/data/postgresql.conf
+   # Allow password (scram) auth on local TCP, which the app uses (DB_HOST=127.0.0.1).
+   # The RHEL default is 'ident', which rejects the app's password login:
+   sudo sed -i -E 's|^(host\s+all\s+all\s+127\.0\.0\.1/32\s+)ident|\1scram-sha-256|' /var/lib/pgsql/data/pg_hba.conf
+   sudo sed -i -E 's|^(host\s+all\s+all\s+::1/128\s+)ident|\1scram-sha-256|'         /var/lib/pgsql/data/pg_hba.conf
+   sudo systemctl enable --now postgresql                       # start + run on boot
+   ```
+   Ensure PostgreSQL auto-starts on boot (`systemctl enable postgresql`) so the
+   cron-launched monitor can always reach it.
+
 3. **Configure credentials and connection** via environment variables. Copy the
    template and edit it:
    ```bash
@@ -139,6 +157,30 @@ python test_all.py                   # broader integration checks (hits Discord/
 python send_discord_test.py          # send a single test message to Discord
 ```
 
+## Research: does the signal actually predict? (`ic_analysis.py` / `ic_model.py`)
+
+Before trusting the alerts as a strategy, measure whether the signals have
+predictive power. These tools are research-only — they never write to the
+production DB (run with `PERSIST_OHLCV=false PERSIST_SIGNALS=false`).
+
+```bash
+# 1. Build a labeled dataset + edge report (replays the live engine, no lookahead).
+#    --days 60 uses the maximum 5-min history Yahoo allows (~59 days).
+PERSIST_OHLCV=false PERSIST_SIGNALS=false \
+  python ic_analysis.py --days 60 --csv signal_labels.csv
+
+# 2. Fit a regime-gated, out-of-sample logistic model and compare its IC to the
+#    raw engine on the held-out test sessions.
+python ic_model.py --csv signal_labels.csv
+```
+
+`ic_analysis.py` reports the Information Coefficient (IC), cross-sectional IC
+information ratio, directional hit-rate, per-component edge and confidence
+calibration. `ic_model.py` fits a calibrated logistic model (numpy only) on the
+breakout/VWAP/volume components with a strict time-based train/test split and
+prints a pass/fail verdict (bar: out-of-sample pooled IC > +0.03 **and**
+IC IR > +0.3). The generated `signal_labels*.csv` files are git-ignored.
+
 ## Troubleshooting
 
 | Issue | Solution |
@@ -147,6 +189,7 @@ python send_discord_test.py          # send a single test message to Discord
 | `connection refused` / DB errors | Confirm Postgres is running and `DB_*` in `.env` are correct |
 | `extension "timescaledb" is not available` | Install the TimescaleDB package for your Postgres version, then re-run `db_setup.sql` |
 | `possibly delisted; no price data found` | Transient yfinance/Yahoo issue; the fetcher already falls back to the most recent available session |
+| `5m data not available ... within the last 60 days` (research tools) | Yahoo caps 5-min history to ~60 days. Use `ic_analysis.py --days 60` (or less); longer windows are rejected outright |
 | No alerts firing | Check it is within market hours (or set `ALLOW_ANYTIME=true`) and that signals are clearing `MIN_SCORE` |
 | Discord alerts not working | Verify `DISCORD_WEBHOOK_URL` is a valid webhook URL |
 
@@ -166,4 +209,8 @@ python send_discord_test.py          # send a single test message to Discord
 - `config.py` — configuration from environment
 - `backfill_30d.py` — one-off 30-day OHLCV backfill
 - `migrate_sqlite.py` — one-off SQLite→Postgres alert migration
+- `ic_analysis.py` — research: replay the engine over history, label forward
+  returns, and report IC / hit-rate / per-component edge / calibration
+- `ic_model.py` — research: calibrated, regime-gated logistic model with an
+  out-of-sample IC test vs the raw engine
 - `monitor_ctl.sh` — start/stop control script for cron

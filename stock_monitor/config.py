@@ -17,7 +17,8 @@ def _get_env(name: str, default: str = "") -> str:
     return value
 
 
-WATCHLIST = ["JUBLFOOD.NS", "HDFCBANK.NS", "IEX.NS", "CIPLA.NS", "SUNPHARMA.NS", "ITC.NS", "VEDL.NS"]
+WATCHLIST = ["JUBLFOOD.NS", "HDFCBANK.NS", "IEX.NS", "CIPLA.NS", "SUNPHARMA.NS", "ITC.NS", "VEDL.NS",
+             "EXIDEIND.NS", "HCLTECH.NS", "COALINDIA.NS", "WIPRO.NS", "NTPC.NS", "ONGC.NS", "RAYMOND.NS"]
 
 ALERT_THRESHOLDS = {
     "pct_move"      : 1.5,   # alert if price moves ±1.5% from day open
