@@ -6,6 +6,22 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Signal-labeling + Information Coefficient (IC) research tool**
+  (`ic_analysis.py`). Replays the *live* signal engine (`alert_engine.analyze`)
+  bar-by-bar over the last ~1–2 months of 5-min data with no lookahead, labels
+  every evaluation with forward returns (+30m / +60m / EOD), and quantifies
+  predictive edge: pooled IC, proper cross-sectional IC with an IC information
+  ratio, directional hit-rate on would-fire alerts, per-component edge (which
+  indicators actually carry signal), and confidence calibration. Writes the full
+  labeled dataset to `signal_labels.csv`. 5-min history is fetched via an
+  explicit start/end window capped at 59 days (Yahoo's hard intraday limit).
+- **Calibrated logistic salvage model** (`ic_model.py`). Fits a regime-gated
+  logistic regression (numpy only — no scipy/sklearn dependency) on the
+  components that showed any edge (breakout / VWAP / volume), with a strict
+  time-based 60/40 train/test split so all IC numbers are out-of-sample. Reports
+  OOS pooled and cross-sectional IC vs the raw engine baseline, directional
+  hit-rate, a reliability/calibration table, and a pass/fail verdict
+  (bar: pooled IC > +0.03 **and** IC IR > +0.3).
 - **Pivot-based support/resistance.** `context.compute_context` now derives
   classic floor-trader pivots (`pivot`, `r1`, `r2`, `s1`, `s2`) from the prior
   daily bar. These are pure arithmetic on already-fetched data (no extra fetch)
@@ -26,6 +42,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tolerance, the no-pivots no-op, and end-to-end wiring through `analyze()`.
 
 ### Changed
+- **`WATCHLIST` expanded from 7 to 14 NSE symbols** (`config.py`): added
+  `EXIDEIND.NS` (Exide), `HCLTECH.NS` (HCL Tech), `COALINDIA.NS` (Coal India),
+  `WIPRO.NS`, `NTPC.NS`, `ONGC.NS` and `RAYMOND.NS`. Each was verified to return
+  intraday and daily data before being added.
 - `SETUP.md` and `TESTING.md` updated to document the daily-context overlay,
   pivot/structure levels, and the expanded test coverage. `context.py` was also
   added to the `SETUP.md` file index.
